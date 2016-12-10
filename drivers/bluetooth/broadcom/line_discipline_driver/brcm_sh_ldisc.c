@@ -1716,7 +1716,7 @@ long brcm_sh_ldisc_stop(struct hci_uart *hu)
 {
     long err = 0;
 
-    reinit_completion(hu->ldisc_installed);
+    reinit_completion(&hu->ldisc_installed);
 
     brcm_btsleep_stop(sleep);
     hu->ldisc_install = V4L2_STATUS_OFF;
@@ -1753,7 +1753,7 @@ long brcm_sh_ldisc_start(struct hci_uart *hu)
 
     do {
         brcm_btsleep_start(sleep);
-        reinit_completion(hu->ldisc_installed);
+        reinit_completion(&hu->ldisc_installed);
         /* send notification to UIM */
         hu->ldisc_install = V4L2_STATUS_ON;
         BT_LDISC_DBG(V4L2_DBG_INIT, "ldisc_install = %c",\
@@ -1766,7 +1766,7 @@ long brcm_sh_ldisc_start(struct hci_uart *hu)
                 msecs_to_jiffies(LDISC_TIME));
         if (!err) { /* timeout */
             pr_err("line disc installation timed out ");
-            reinit_completion(hu->tty_close_complete);
+            reinit_completion(&hu->tty_close_complete);
             err = brcm_sh_ldisc_stop(hu);
             cl_err = wait_for_completion_timeout(&hu->tty_close_complete,
                     msecs_to_jiffies(TTY_CLOSE_TIME));
@@ -1781,7 +1781,7 @@ long brcm_sh_ldisc_start(struct hci_uart *hu)
             err = download_patchram(hu);
             if (err != 0) {
                 pr_err("patchram download failed");
-                reinit_completion(hu->tty_close_complete);
+                reinit_completion(&hu->tty_close_complete);
                 brcm_sh_ldisc_stop(hu);
                 cl_err = wait_for_completion_timeout(&hu->tty_close_complete,
                         msecs_to_jiffies(TTY_CLOSE_TIME));
