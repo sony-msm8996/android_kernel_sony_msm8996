@@ -656,8 +656,7 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 			card->ext_csd.data_tag_unit_size = 0;
 		}
 
-		card->ext_csd.max_packed_writes =
-			ext_csd[EXT_CSD_MAX_PACKED_WRITES];
+		card->ext_csd.max_packed_writes = 8;
 		card->ext_csd.max_packed_reads =
 			ext_csd[EXT_CSD_MAX_PACKED_READS];
 	} else {
@@ -697,6 +696,10 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 		card->ext_csd.enhanced_rpmb_supported =
 			(card->ext_csd.rel_param &
 			 EXT_CSD_WR_REL_PARAM_EN_RPMB_REL_WR);
+
+		/* Report firmware version for eMMC 5.0 devices */
+		memcpy(card->ext_csd.fwrev, &ext_csd[EXT_CSD_FW_VERSION],
+		       MMC_FIRMWARE_LEN);
 	} else {
 		card->ext_csd.cmdq_support = 0;
 		card->ext_csd.cmdq_depth = 0;
@@ -2078,6 +2081,11 @@ reinit:
 		}
 	}
 
+	if (card->cid.manfid == CID_MANFID_HYNIX &&
+	    (card->ext_csd.fw_version == 0xA2 || card->ext_csd.fw_version == 0xA4)) {
+		card->host->caps2 &= ~MMC_CAP2_CMD_QUEUE;
+	}
+
 	/*
 	 * Start auto bkops, if supported.
 	 *
@@ -2412,7 +2420,7 @@ static int _mmc_suspend(struct mmc_host *host, bool is_suspend)
 			goto out_err;
 	}
 
-	err = mmc_flush_cache(host->card);
+	err = mmc_cache_ctrl(host, 0);
 	if (err)
 		goto out_err;
 
@@ -2516,13 +2524,20 @@ static int mmc_partial_init(struct mmc_host *host)
 	pr_debug("%s: %s: reading and comparing ext_csd successful\n",
 		mmc_hostname(host), __func__);
 
-	if (card->ext_csd.cmdq_support && (card->host->caps2 &
-					   MMC_CAP2_CMD_QUEUE)) {
-		err = mmc_select_cmdq(card);
+	err = mmc_cache_ctrl(host, 1);
+	if (err) {
+		pr_err("%s: %s faild (%d) cache_ctrl\n",
+		    mmc_hostname(host), __func__, err);
+		goto out;
+	}
+
+	if (host->card->cmdq_init) {
+		mmc_host_clk_hold(host);
+		host->cmdq_ops->enable(host);
+		mmc_host_clk_release(host);
+		err = mmc_cmdq_halt(host, false);
 		if (err) {
-			pr_warn("%s: %s: enabling CMDQ mode failed (%d)\n",
-					mmc_hostname(card->host),
-					__func__, err);
+			pr_err("%s: un-halt: failed: %d\n", __func__, err);
 		}
 	}
 out:
