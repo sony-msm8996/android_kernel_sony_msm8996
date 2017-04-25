@@ -1886,6 +1886,7 @@ reinit:
 	/*
 	 * Enable power_off_notification byte in the ext_csd register
 	 */
+	if (host->caps2 & MMC_CAP2_FULL_PWR_CYCLE)
 	if (card->ext_csd.rev >= 6) {
 		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
 				 EXT_CSD_POWER_OFF_NOTIFICATION,
