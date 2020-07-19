@@ -788,4 +788,9 @@ config INPUT_DRV2667_HAPTICS
 
 source "drivers/input/misc/ots_pat9125/Kconfig"
 
+config FPC1145_PLATFORM
+	tristate "Platform FPC1145 finger print driver"
+	default n
+	help
+	  Select this module to enable FPC1145 tee finger print driver
 endif
