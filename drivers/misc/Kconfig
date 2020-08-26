@@ -608,6 +608,15 @@ config QPNP_MISC
 	  and the driver provides an API to check if this interrupt
 	  is available on the current PMIC chip.
 
+config NFC_PN547
+	tristate "NXP PN547 driver"
+	depends on I2C
+	default n
+	help
+	  This driver provides support for NFC NXP PN547 devices.
+	  Say Y here to compile support for PN547 devices into the
+	  kernel or say M to compile it as module (pn547).
+
 config UID_SYS_STATS_DEBUG
 	bool "Per-TASK statistics"
 	depends on UID_SYS_STATS
