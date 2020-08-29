@@ -29,8 +29,6 @@ static int somc_chg_lrc_get_capacity(struct chg_somc_params *params,
 static void somc_chg_lrc_check(struct smbchg_chip *chip);
 static void somc_unplug_wakelock(struct chg_somc_params *params);
 static void somc_chg_shutdown_lowbatt(struct smbchg_chip *chip);
-static void somc_chg_check_soc(struct smbchg_chip *chip,
-			int current_soc);
 static void somc_chg_temp_status_transition(
 			struct chg_somc_params *params, u8 reg);
 static bool somc_chg_therm_is_not_charge(
@@ -46,7 +44,6 @@ static void somc_chg_therm_level_set(struct smbchg_chip *chip, int lvl_sel);
 static void somc_chg_therm_level_set_work(struct work_struct *work);
 static int somc_chg_apsd_wait_rerun(struct smbchg_chip *chip);
 static void somc_chg_apsd_rerun_check(struct smbchg_chip *chip);
-static void somc_chg_apsd_rerun(struct smbchg_chip *chip);
 static void somc_chg_init(struct chg_somc_params *params);
 static int somc_chg_set_step_charge_params(struct smbchg_chip *chip,
 			struct device_node *node);

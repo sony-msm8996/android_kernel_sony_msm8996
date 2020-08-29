@@ -410,58 +410,6 @@ static void somc_chg_shutdown_lowbatt(struct smbchg_chip *chip)
 	}
 }
 
-static void somc_chg_stepchg_set_fastchg_ma(struct smbchg_chip *chip,
-			int current_ma)
-{
-	int rc = 0;
-
-	pr_smb_ext(PR_STEP_CHG,
-		"fastchg-ma changed to %dma for stepchg\n", current_ma);
-	if (current_ma)
-		rc = vote(chip->fcc_votable, STEP_FCC_VOTER, true, current_ma);
-	else
-		rc = vote(chip->fcc_votable, STEP_FCC_VOTER, false, 0);
-	if (rc < 0)
-		pr_err("Couldn't vote for fastchg current rc=%d\n", rc);
-}
-
-static void somc_chg_check_soc(struct smbchg_chip *chip,
-			int current_soc)
-{
-	struct chg_somc_params *params = &chip->somc_params;
-	bool prev_is_step_chg;
-	int current_ma;
-
-	if (!params->step_chg.enabled) {
-		pr_smb_ext(PR_STEP_CHG, "step chg not support\n");
-		return;
-	}
-
-	pr_smb_ext(PR_STEP_CHG, "soc=%d prev_soc=%d prev_step_chg=%d\n",
-		current_soc, params->step_chg.prev_soc,
-		params->step_chg.is_step_chg);
-	prev_is_step_chg = params->step_chg.is_step_chg;
-	if (current_soc != params->step_chg.prev_soc) {
-		params->step_chg.prev_soc = current_soc;
-		params->step_chg.is_step_chg =
-			current_soc < params->step_chg.thresh ?
-			true : false;
-	}
-
-	if (params->step_chg.is_step_chg == prev_is_step_chg) {
-		pr_smb_ext(PR_STEP_CHG, "step charge does not change\n");
-		return;
-	}
-
-	if (params->step_chg.is_step_chg)
-		current_ma = 0;
-	else
-		current_ma = params->step_chg.current_ma;
-	pr_smb_ext(PR_STEP_CHG, "is_step_chg=%d current_ma=%d\n",
-		params->step_chg.is_step_chg, current_ma);
-	somc_chg_stepchg_set_fastchg_ma(chip, current_ma);
-}
-
 #define HOT_BIT		BIT(0)
 #define WARM_BIT	BIT(1)
 #define COLD_BIT	BIT(2)
@@ -882,16 +830,6 @@ static void somc_chg_apsd_rerun_check(struct smbchg_chip *chip)
 				params->apsd.delay_ms ?
 				msecs_to_jiffies(params->apsd.delay_ms) :
 				msecs_to_jiffies(RERUN_DELAY_MS));
-}
-
-static void somc_chg_apsd_rerun(struct smbchg_chip *chip)
-{
-	struct chg_somc_params *params = &chip->somc_params;
-
-	pr_info("apsd_rerun start\n");
-	if (params->apsd.wq && !params->apsd.rerun_wait_irq)
-		queue_delayed_work(params->apsd.wq, &params->apsd.rerun_w,
-					msecs_to_jiffies(RERUN_DELAY_MS));
 }
 
 static void somc_chg_apsd_rerun_work(struct work_struct *work)

@@ -75,6 +75,7 @@ struct parallel_usb_cfg {
 	ktime_t				last_disabled;
 	bool				enabled_once;
 	int				min_main_icl_ma;
+	bool				use_parallel_aicl;
 };
 
 struct ilim_entry {
@@ -276,6 +277,7 @@ struct smbchg_chip {
 	struct completion		src_det_raised;
 	struct completion		usbin_uv_lowered;
 	struct completion		usbin_uv_raised;
+	struct completion		hvdcp_det_done;
 	int				pulse_cnt;
 	struct led_classdev		led_cdev;
 	bool				skip_usb_notification;
@@ -3947,100 +3949,6 @@ static void check_battery_type(struct smbchg_chip *chip)
 	}
 }
 
-static void smbchg_external_power_changed(struct power_supply *psy)
-{
-	struct smbchg_chip *chip = container_of(psy,
-				struct smbchg_chip, batt_psy);
-	union power_supply_propval prop = {0,};
-	int rc, current_limit = 0, soc;
-	enum power_supply_type usb_supply_type;
-	char *usb_type_name = "null";
-#ifdef CONFIG_QPNP_SMBCHARGER_EXTENSION
-	enum power_supply_type type = POWER_SUPPLY_TYPE_UNKNOWN;
-#endif
-
-	if (chip->bms_psy_name)
-		chip->bms_psy =
-			power_supply_get_by_name((char *)chip->bms_psy_name);
-
-	smbchg_aicl_deglitch_wa_check(chip);
-	if (chip->bms_psy) {
-		check_battery_type(chip);
-		soc = get_prop_batt_capacity(chip);
-		if (chip->previous_soc != soc) {
-			chip->previous_soc = soc;
-			smbchg_soc_changed(chip);
-		}
-
-#ifndef CONFIG_QPNP_SMBCHARGER_EXTENSION
-		rc = smbchg_config_chg_battery_type(chip);
-		if (rc)
-			pr_smb(PR_MISC,
-				"Couldn't update charger configuration rc=%d\n",
-									rc);
-#endif
-#ifdef CONFIG_QPNP_SMBCHARGER_EXTENSION
-		somc_chg_check_soc(chip, soc);
-#endif
-	}
-
-	rc = chip->usb_psy->get_property(chip->usb_psy,
-				POWER_SUPPLY_PROP_CHARGING_ENABLED, &prop);
-	if (rc == 0)
-		vote(chip->usb_suspend_votable, POWER_SUPPLY_EN_VOTER,
-				!prop.intval, 0);
-
-	rc = chip->usb_psy->get_property(chip->usb_psy,
-				POWER_SUPPLY_PROP_CURRENT_MAX, &prop);
-	if (rc == 0)
-		current_limit = prop.intval / 1000;
-
-	read_usb_type(chip, &usb_type_name, &usb_supply_type);
-#ifdef CONFIG_QPNP_SMBCHARGER_EXTENSION
-	rc = chip->usb_psy->get_property(chip->usb_psy,
-				POWER_SUPPLY_PROP_TYPE, &prop);
-	if (rc == 0)
-		type = prop.intval;
-
-	if (type == POWER_SUPPLY_TYPE_RETRY_DET) {
-		pr_smb(PR_SOMC,
-			"claimed RETRY_DET, rerun apsd, type %d -> %d\n",
-							usb_supply_type, type);
-		goto rerun_apsd;
-	}
-#endif
-
-	if (usb_supply_type != POWER_SUPPLY_TYPE_USB)
-		goto  skip_current_for_non_sdp;
-
-	pr_smb(PR_MISC, "usb type = %s current_limit = %d\n",
-			usb_type_name, current_limit);
-
-	/* Flow chart: C-1 SDP */
-	/* Flow chart: C-12 INVALID */
-	rc = vote(chip->usb_icl_votable, PSY_ICL_VOTER, true,
-				current_limit);
-	if (rc < 0)
-		pr_err("Couldn't update USB PSY ICL vote rc=%d\n", rc);
-
-#ifdef CONFIG_QPNP_SMBCHARGER_EXTENSION
-	if (CURRENT_100_MA < current_limit) {
-		pr_smb(PR_MISC, "settled charger type and draw over 100mA\n");
-		schedule_work(&chip->usb_set_online_work);
-	}
-#endif
-
-skip_current_for_non_sdp:
-	smbchg_vfloat_adjust_check(chip);
-
-	power_supply_changed(&chip->batt_psy);
-#ifdef CONFIG_QPNP_SMBCHARGER_EXTENSION
-	return;
-rerun_apsd:
-	somc_chg_apsd_rerun(chip);
-#endif
-}
-
 static int smbchg_otg_regulator_enable(struct regulator_dev *rdev)
 {
 	int rc = 0;
@@ -6385,11 +6293,13 @@ static void smbchg_external_power_changed(struct power_supply *psy)
 			smbchg_soc_changed(chip);
 		}
 
+#ifndef CONFIG_QPNP_SMBCHARGER_EXTENSION
 		rc = smbchg_config_chg_battery_type(chip);
 		if (rc)
 			pr_smb(PR_MISC,
 				"Couldn't update charger configuration rc=%d\n",
 									rc);
+#endif
 	}
 
 	rc = chip->usb_psy->get_property(chip->usb_psy,
@@ -6455,6 +6365,13 @@ static void smbchg_external_power_changed(struct power_supply *psy)
 				current_limit);
 	if (rc < 0)
 		pr_err("Couldn't update USB PSY ICL vote rc=%d\n", rc);
+
+#ifdef CONFIG_QPNP_SMBCHARGER_EXTENSION
+	if (CURRENT_100_MA < current_limit) {
+		pr_smb(PR_MISC, "settled charger type and draw over 100mA\n");
+		schedule_work(&chip->usb_set_online_work);
+	}
+#endif
 
 skip_current_for_non_sdp:
 	smbchg_vfloat_adjust_check(chip);
