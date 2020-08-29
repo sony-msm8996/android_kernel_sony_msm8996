@@ -42,6 +42,7 @@
 			vendor {
 				dev = "/dev/block/platform/soc/7464900.sdhci/by-name/oem";
 				type = "squashfs";
+				fsmgr_flags = "wait";
 			};
 		};
 	};
